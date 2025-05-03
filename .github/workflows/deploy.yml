@@ -27,4 +27,4 @@ jobs:
             npm i
             npm run build
             pm2 kill
-            pm2 start dist/main.js --name "backend-server"
+            pm2 start dist/main.js --name "backend-server" ##!
