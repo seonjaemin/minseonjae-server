@@ -20,7 +20,7 @@ jobs:
           envs: ENV
           script_stop: true
           script: |
-            cd /home/ubuntu/cicd-nest-test
+            cd /home/ubuntu/minseonjae-server
             rm -rf .env
             git pull origin main
             echo "$ENV" > .env
