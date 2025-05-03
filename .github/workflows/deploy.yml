@@ -1,30 +1,60 @@
-name: Deploy To EC2
+name: Deploy To EC2 ## Workflow의 이름을 정의
 
-on:
-  push:
+on: ## Workflow가 언제 실행될지를 정의하는 트리거 설정
+  push: ## 코드가 리포지토리에 푸시(Push)될 때 Workflow를 실행
     branches:
-      - main
+      - main  ## 푸시 이벤트가 발생할 특정 브랜치를 지정
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
+jobs: ## 배포 작업을 수행하는 Job의 설정
+  deploy: # Job을 식별하기 위한 id
+    runs-on: ubuntu-latest ##  # Github Actions를 실행시킬 서버 종류 선택
+    steps:  # Step : 특정 작업을 수행하는 가장 작은 단위, Job은 여러 Step들로 구성
+      - name: Github Repository 파일 불러오기
+        uses: actions/checkout@v4
+
+      - name: Node 설치
+        uses: actions/setup-node@v4 ## uses: actions/사용할 액션을 지정, 
+                                    ## setup-node@v4 액션의 버전 4를 사용하겠다
+        with: ## 액션에 대한 입력값을 정의
+          node-version: "20" ## Node.js의 20.x 버전을 설치하도록 액션에 지시
+
+      - name: 의존성(라이브러리) 설치
+        run: npm ci
+
+      - name: .env 파일 만들기
+        run: echo '${{ secrets.ENV }}' > .env
+
+      - name: 테스트 코드 실행
+        run: npm run test
+
+      - name: 빌드
+        run: npm run build
+
+      - name: 압축하기
+        run: tar -czvf project.tar.gz dist .env package.json package-lock.json
+
+      - name: SCP로 EC2에 빌드된 파일 전송하기
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }} ## 대상 서버의 호스트 주소를 설정
+          username: ${{ secrets.EC2_USERNAME }} ## 대상 서버에 사용자 이름을 설정
+          key: ${{ secrets.EC2_PRIVATE_KEY }} ## SSH 개인 키를 설정
+          source: project.tar.gz ## 보내는 물건을 지정
+          target: /home/ubuntu/minseonjae-server/tobe ## 받을 주소 지정
+          
       - name: SSH로 EC2에 접속하기
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          ENV: ${{ secrets.ENV }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_PRIVATE_KEY }}
-          envs: ENV
           script_stop: true
           script: |
-            cd /home/ubuntu/minseonjae-server
-            rm -rf .env
-            git pull origin main
-            echo "$ENV" > .env
+            rm -rf /home/ubuntu/minseonjae-server/current
+            mkdir -p /home/ubuntu/minseonjae-server/current
+            mv /home/ubuntu/minseonjae-server/tobe/project.tar.gz /home/ubuntu/minseonjae-server/current/project.tar.gz
+            cd /home/ubuntu/minseonjae-server/current
+            tar -xvf project.tar.gz
             npm i
-            npm run build
             pm2 kill
-            pm2 start dist/main.js --name "backend-server" ##!
+            pm2 start dist/main.js --name "backend-server"
